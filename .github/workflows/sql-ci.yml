@@ -1,0 +1,48 @@
+name: SQL CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-sql:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sql_practice
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d sql_practice"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Load schema
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d sql_practice -v ON_ERROR_STOP=1 -f schema/001_create_schema.sql
+          psql -h localhost -U postgres -d sql_practice -v ON_ERROR_STOP=1 -f schema/002_seed_data.sql
+          psql -h localhost -U postgres -d sql_practice -v ON_ERROR_STOP=1 -f indexes/001_recommended_indexes.sql
+
+      - name: Run query suite
+        env:
+          PGPASSWORD: postgres
+        run: |
+          for query in queries/*.sql; do
+            echo "Running $query"
+            psql -h localhost -U postgres -d sql_practice -v ON_ERROR_STOP=1 -f "$query"
+          done
